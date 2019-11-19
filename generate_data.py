@@ -1,26 +1,33 @@
+from utils import *
+
 import pyaudio
 import wave
 import os
 import time
 from pynput.keyboard import Key, Listener
+import pandas as pd
 import logging
-import multiprocessing
 import argparse
+import numpy as np
+
+
 
 def keypress(Key):
 	logging.info(str(Key))
 
 def keylogger(num_seconds):
 	log_directory = ""
-	logging.basicConfig(filename ="./data/log_results.txt",level = logging.DEBUG, format = '%(asctime)s : %(message)s')
+	logging.basicConfig(filename=tmp_dir+"log_results.txt",level=logging.DEBUG, format='%(asctime)s : %(message)s')
 	listener = Listener(
     on_press=keypress)
 	return listener
 
-def begin_audio(num_seconds, CHUNK=1024,CHANNELS=2,RATE=44100,FORMAT = pyaudio.paInt16):
+def record(num_seconds, CHUNK=1024,CHANNELS=2,RATE=44100,FORMAT = pyaudio.paInt16):
+	""" Records audio and characters typed for num_seconds, returns the start time of recording.
+	"""
 	FORMAT = pyaudio.paInt16
 	RECORD_SECONDS = num_seconds
-	WAVE_OUTPUT_FILENAME = "data.wav"
+	WAVE_OUTPUT_FILENAME = get_nonexistant_path(data_dir+"/sounddata.wav")
 	p = pyaudio.PyAudio()
 	stream = p.open(format=FORMAT,
 	                channels=CHANNELS,
@@ -47,15 +54,37 @@ def begin_audio(num_seconds, CHUNK=1024,CHANNELS=2,RATE=44100,FORMAT = pyaudio.p
 		wf.setframerate(RATE)
 		wf.writeframes(b''.join(frames))
 		wf.close()
-def make_dirs():
-	if not os.path.exists("./data"):
-		os.makedirs("./data")
+	return start
+
+def txt_to_csv(txt,start):
+	"""
+	Turn the logging txt file into a usable CSV format
+	"""
+	arr = np.delete(np.loadtxt(tmp_dir+txt,dtype=str).squeeze(),2,1)
+	times = convert_times(arr) - start
+	output = np.vstack((times,arr[:,-1])).T
+	data = pd.DataFrame(output,columns=["time","keypress"])
+	fname = get_nonexistant_path(data_dir+"keystrokedata.csv")
+	data["keypress"] = data["keypress"].apply(map_letters)
+	data.to_csv(fname)
+
+def map_letters(letter):
+	try:
+		return dictionary_mapping[letter]
+	except:
+		return letter.strip("'").lower()
+
+
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser(description='Log keypresses and record sound')
 	parser.add_argument('--seconds',help='How many seconds',type=int,default=1)
 	args = parser.parse_args()
 	num_seconds = args.seconds
-	make_dirs()
-	begin_audio(num_seconds)
 	
+
+	make_dirs()
+	start_time = record(num_seconds)
+	txt_to_csv("log_results.txt",start_time)
+	open(tmp_dir+"log_results.txt","w").close()
+		
